@@ -450,6 +450,10 @@ input[type=text]:focus{border-color:#b8860b;box-shadow:0 0 10px rgba(180,140,50,
      <button id="jb" class="btn">Enter Arena</button>
     </div>
     <div id="stat">Enter your name and join!</div>
+    <div style="font-size:11px;color:#405060;text-align:center;margin-top:4px;font-style:italic;">
+      If stuck on "Connecting…", open Firebase Console → Realtime Database → Rules and set
+      <code style="background:rgba(255,255,255,.07);padding:1px 5px;border-radius:3px;color:#a0b8d0;">.read/.write</code> to <code style="background:rgba(255,255,255,.07);padding:1px 5px;border-radius:3px;color:#a0b8d0;">true</code>
+    </div>
    </div>
   </div>
  </div>
@@ -586,13 +590,14 @@ import{initializeApp}from"https://www.gstatic.com/firebasejs/10.12.0/firebase-ap
 import{getDatabase,ref,set,get,push,onValue,update,remove}from"https://www.gstatic.com/firebasejs/10.12.0/firebase-database.js";
 
 const FB={
-  apiKey: "AIzaSyBwcon6mrr7AV-CZ5a82bbe2UaNvZRcyNk",
-  authDomain: "chess-versions.firebaseapp.com",
-  projectId: "chess-versions",
-  storageBucket: "chess-versions.firebasestorage.app",
-  messagingSenderId: "619354635025",
-  appId: "1:619354635025:web:bd79e95b107f91afee2ab0",
-  measurementId: "G-R4CHF2K3YM"
+  apiKey:"AIzaSyBwcon6mrr7AV-CZ5a82bbe2UaNvZRcyNk",
+  authDomain:"chess-versions.firebaseapp.com",
+  databaseURL:"https://chess-versions-default-rtdb.firebaseio.com",
+  projectId:"chess-versions",
+  storageBucket:"chess-versions.firebasestorage.app",
+  messagingSenderId:"619354635025",
+  appId:"1:619354635025:web:bd79e95b107f91afee2ab0",
+  measurementId:"G-R4CHF2K3YM"
 };
 
 // ── Constants ─────────────────────────────────────────────────────
@@ -1172,8 +1177,16 @@ let moveHistory=[],histIdx=-1; // -1 = live view
 let perspective='red';
 const stat=document.getElementById('stat');
 
-try{const app=initializeApp(FB);db2=getDatabase(app);}
-catch(e){stat.textContent='Firebase error: '+e.message;stat.style.color='#e74c3c';}
+try{
+  const app=initializeApp(FB);
+  db2=getDatabase(app);
+  // Quick connectivity check — will fail fast if rules block access
+  // (no-op, just warms up the connection)
+}catch(e){
+  console.error('Firebase init error:',e);
+  if(stat) stat.textContent='❌ Firebase init failed: '+e.message;
+  if(stat) stat.style.color='#e74c3c';
+}
 initPieces(); // start fetching piece SVGs immediately in background
 
 // ── Lobby ─────────────────────────────────────────────────────────
@@ -1185,38 +1198,67 @@ document.getElementById('jb').addEventListener('click',doJoin);
 ['ni','ri'].forEach(id=>document.getElementById(id).addEventListener('keydown',e=>{if(e.key==='Enter')doJoin();}));
 
 async function doJoin(){
-  if(!db2){setStat('Firebase not ready!');return;}
+  if(!db2){setStat('❌ Firebase not initialised — check console.');return;}
   const name=document.getElementById('ni').value.trim();
   if(!name){setStat('Enter your name!');return;}
   const color=document.querySelector('.cc.sel')?.dataset?.color;
-  if(!color){setStat('Choose a color!');return;}
+  if(!color){setStat('Choose a colour!');return;}
   myName=name;myColor=color;perspective=color;
   let rid=document.getElementById('ri').value.trim().toUpperCase();
   if(!rid)rid=Math.random().toString(36).substring(2,8).toUpperCase();
-  setStat('Connecting...');
+  setStat('Connecting…');
+
+  // 12-second timeout so the user never hangs silently
+  let done=false;
+  const tmr=setTimeout(()=>{
+    if(done)return; done=true;
+    setStat('❌ Timed out — check your internet or Firebase Rules (set .read/.write to true).');
+    stat.style.color='#e74c3c';
+  },12000);
+
   try{
     const snap=await get(ref(db2,`rooms/${rid}`));
+    if(!done){done=true;clearTimeout(tmr);}else return;
+
     if(!snap.exists()){
-      const TIMER_MS=300000; // 5 minutes per player
+      const TIMER_MS=300000;
+      // Convert board to plain object — avoids Firebase issues with sparse arrays
+      const boardArr=initBoard();
+      const boardObj={};
+      boardArr.forEach((v,i)=>{if(v!==null)boardObj[String(i)]=v;});
+
       await set(ref(db2,`rooms/${rid}`),{
-        board:initBoard(),
+        board:boardObj,
         currentTurn:'red',turnIndex:0,
-        castlingRights:initCastlingRights(),
         eliminated:null,lastMove:null,winner:null,
         players:{[myColor]:{name:myName,online:true}},
         timers:{red:TIMER_MS,blue:TIMER_MS,green:TIMER_MS,gold:TIMER_MS},
-        turnStartedAt:null, gameStarted:false,
+        turnStartedAt:null,gameStarted:false,
         createdAt:Date.now()
       });
-      setStat('Room created! Share ID: '+rid);
+      setStat('✓ Room created! Share ID: '+rid);
     }else{
       const ex=snap.val();
-      if(ex.players?.[myColor]?.name&&ex.players[myColor].name!==myName){setStat('Color '+myColor+' is taken!');return;}
+      if(ex.players?.[myColor]?.name&&ex.players[myColor].name!==myName){
+        setStat('⚠ Colour '+myColor+' is taken — choose another.');return;
+      }
       await update(ref(db2,`rooms/${rid}/players/${myColor}`),{name:myName,online:true});
-      setStat('Joined room '+rid+'!');
+      setStat('✓ Joined room '+rid+'!');
     }
     roomId=rid;setTimeout(enterGame,600);
-  }catch(err){console.error(err);setStat('Failed: '+err.message);stat.style.color='#e74c3c';}
+  }catch(err){
+    clearTimeout(tmr);
+    console.error('doJoin error:',err);
+    const m=err?.message||String(err);
+    if(m.toLowerCase().includes('permission')){
+      setStat('❌ Permission denied — open Firebase Console → Realtime Database → Rules and set .read/.write to true.');
+    }else if(m.toLowerCase().includes('network')||m.toLowerCase().includes('fetch')){
+      setStat('❌ Network error — check your internet connection.');
+    }else{
+      setStat('❌ '+m);
+    }
+    stat.style.color='#e74c3c';
+  }
 }
 function setStat(m){stat.textContent=m;stat.style.color='#b8860b';}
 
@@ -1565,11 +1607,14 @@ async function commitMove(move,promo){
       newCaptures[myColor]=Object.fromEntries(existing.map((p,i)=>[i,p]));
     }
 
+    // Convert board array → plain object for reliable Firebase storage
+    const boardObj={};
+    newBoard.forEach((v,i)=>{if(v!==null)boardObj[String(i)]=v;});
+
     await update(ref(db2,`rooms/${roomId}`),{
-      board:newBoard,
+      board:boardObj,
       currentTurn:winner?null:nextColor,
       turnIndex:nextIdx,
-      castlingRights:newCR,
       eliminated:elimObj,
       lastMove:{from:move.from,to:move.to,color:myColor},
       winner:winner||null,
@@ -1578,11 +1623,12 @@ async function commitMove(move,promo){
       gameStarted:true,
       captures:newCaptures,
     });
-    // Store board snapshot + elim state for move history browsing
-    const boardSnap=newBoard.map(p=>p?{type:p.type,color:p.color}:null); // 100 squares
+    // Store board snapshot for move history — also as plain object
+    const boardSnap={};
+    newBoard.forEach((p,i)=>{if(p)boardSnap[String(i)]={type:p.type,color:p.color};});
     await push(ref(db2,`rooms/${roomId}/moveLog`),{
       notation:note,color:myColor,ts:Date.now(),
-      board:boardSnap, elim:newElim,
+      board:boardSnap,elim:newElim,
       lastMove:{from:move.from,to:move.to,color:myColor}
     });
   }catch(err){
