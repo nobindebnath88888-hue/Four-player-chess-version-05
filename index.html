@@ -303,8 +303,9 @@ input[type=text]:focus{border-color:#b8860b;box-shadow:0 0 10px rgba(180,140,50,
   /* Total overhead: 36 top-bar + 22 top-names + 22 bot-names + 50 ad-space + 40 bot-bar = 170px */
   #board-wrap{
     position:relative!important;flex-shrink:0;
-    width:min(100vw, calc(100dvh - 170px));
-    height:min(100vw, calc(100dvh - 170px));
+    /* 9:10 portrait ratio — width = height * 9/10 */
+    height:min(calc(100dvh - 170px), calc(100vw * 10 / 9));
+    width:min(calc((100dvh - 170px) * 9 / 10), 100vw);
   }  /* Ad space — sits below bottom corner row, takes remaining space */
   #ad-space{
     flex:1;
@@ -504,7 +505,7 @@ input[type=text]:focus{border-color:#b8860b;box-shadow:0 0 10px rgba(180,140,50,
       <div class="corner-name-cell" id="cn-tr"></div>
      </div>
      <div class="bc" id="board-wrap">
-      <canvas id="gc" width="800" height="720"></canvas>
+      <canvas id="gc" width="720" height="800"></canvas>
       <div id="pm" class="pm hidden">
        <div class="pi"><p>Promote Pawn to:</p><div id="pc2"></div></div>
       </div>
@@ -605,8 +606,8 @@ const TEAMS={red:'A',gold:'A',blue:'B',green:'B',teamA:'A',teamB:'B'};
 const TURN_ORDER=['red','blue','gold','green'];
 
 const PAWN_DIR  ={red:-1,blue:1, green:1,gold:-1};
-const PAWN_PROMO={red:0,  blue:8, green:8,gold:0};
-const PAWN_START={red:7,  blue:1, green:1,gold:7};
+const PAWN_PROMO={red:0,  blue:9, green:9,gold:0};
+const PAWN_START={red:8,  blue:1, green:1,gold:8};
 
 // King starting squares for castling reference
 // Red: King at (7,3), Rooks at (7,0) [already Boat] and... wait —
@@ -696,30 +697,30 @@ let _boardThemeIdx = 0; // default: Glass
 // Castling: each king moves 2 toward its Rook (king-side = toward center in this layout)
 function initBoard(){
   const b=Array(90).fill(null);
-  const P=(r,c,t,co)=>{b[r*10+c]={type:t,color:co}};
-  // ── 9×10 board — Shared King Variant ────────────────────────────
-  // 9 rows (0-8), 10 columns (0-9)
-  // Back rank layout (cols 0-9):
-  //   R  N  B  Q  B | K_shared | B  Q  N  R
-  //   0  1  2  3  4      5      6  7  8  9
+  const P=(r,c,t,co)=>{b[r*9+c]={type:t,color:co}};
+  // ── 9 columns × 10 rows — Shared King Variant ────────────────────
+  // Board: cols 0-8 (9 wide), rows 0-9 (10 tall) — portrait orientation
+  // Back rank layout (9 cols):
+  //   R  N  B  Q | K_shared | Q  B  N  R
+  //   0  1  2  3      4       5  6  7  8
   //
-  // Team A (bottom, row 8): Red (cols 0-4) + shared K at col 5 + Gold (cols 6-9)
-  // Team B (top,  row 0): Blue (cols 0-4) + shared K at col 5 + Green (cols 6-9)
-  // Pawns one row in from the back rank.
+  // Team A bottom (row 9): Red cols 0-3, King col 4, Gold cols 5-8
+  // Team B top    (row 0): Blue cols 0-3, King col 4, Green cols 5-8
+  // Pawns at rows 8 and 1 (cols 0-3 and 5-8 — no pawn at king col 4)
 
-  // Team A — bottom (row 8 = back rank, row 7 = pawns)
-  P(8,0,'R','red');  P(8,1,'N','red');  P(8,2,'B','red');  P(8,3,'Q','red');  P(8,4,'B','red');
-  P(8,5,'K','teamA');
-  P(8,6,'B','gold'); P(8,7,'Q','gold'); P(8,8,'N','gold'); P(8,9,'R','gold');
-  for(let c=0;c<5;c++)  P(7,c,'P','red');
-  for(let c=5;c<10;c++) P(7,c,'P','gold');
+  // Team A — bottom (row 9 back rank, row 8 pawns)
+  P(9,0,'R','red');  P(9,1,'N','red');  P(9,2,'B','red');  P(9,3,'Q','red');
+  P(9,4,'K','teamA');
+  P(9,5,'Q','gold'); P(9,6,'B','gold'); P(9,7,'N','gold'); P(9,8,'R','gold');
+  for(let c=0;c<4;c++)  P(8,c,'P','red');
+  for(let c=5;c<9;c++)  P(8,c,'P','gold');
 
-  // Team B — top (row 0 = back rank, row 1 = pawns)
-  P(0,0,'R','blue'); P(0,1,'N','blue'); P(0,2,'B','blue'); P(0,3,'Q','blue'); P(0,4,'B','blue');
-  P(0,5,'K','teamB');
-  P(0,6,'B','green'); P(0,7,'Q','green'); P(0,8,'N','green'); P(0,9,'R','green');
-  for(let c=0;c<5;c++)  P(1,c,'P','blue');
-  for(let c=5;c<10;c++) P(1,c,'P','green');
+  // Team B — top (row 0 back rank, row 1 pawns)
+  P(0,0,'R','blue'); P(0,1,'N','blue'); P(0,2,'B','blue'); P(0,3,'Q','blue');
+  P(0,4,'K','teamB');
+  P(0,5,'Q','green'); P(0,6,'B','green'); P(0,7,'N','green'); P(0,8,'R','green');
+  for(let c=0;c<4;c++)  P(1,c,'P','blue');
+  for(let c=5;c<9;c++)  P(1,c,'P','green');
 
   return b;
 }
@@ -739,8 +740,8 @@ function initCastlingRights(){
 
 // ── Game Logic ────────────────────────────────────────────────────
 function gp(b,r,c){
-  if(r<0||r>8||c<0||c>9)return undefined;
-  return b[r*10+c]||null;
+  if(r<0||r>9||c<0||c>8)return undefined;
+  return b[r*9+c]||null;
 }
 // _elimSet tracks eliminated colors so their pieces are capturable by anyone incl. allies
 let _elimSet=new Set();
@@ -762,7 +763,7 @@ function genMoves(board,row,col,color,cr){
 
   const slide=(dr,dc)=>{
     let r=row+dr,c=col+dc;
-    while(r>=0&&r<=8&&c>=0&&c<=9){
+    while(r>=0&&r<=9&&c>=0&&c<=8){
       const t=gp(board,r,c);
       if(isFriend(t,color))break;
       mv.push({from:[row,col],to:[r,c],capture:!!t});
@@ -772,7 +773,7 @@ function genMoves(board,row,col,color,cr){
   };
   const step=(dr,dc)=>{
     const tr=row+dr,tc=col+dc;
-    if(tr<0||tr>8||tc<0||tc>9)return;
+    if(tr<0||tr>9||tc<0||tc>8)return;
     if(!isFriend(gp(board,tr,tc),color))
       mv.push({from:[row,col],to:[tr,tc],capture:!!gp(board,tr,tc)});
   };
@@ -780,17 +781,17 @@ function genMoves(board,row,col,color,cr){
   if(pc.type==='P'){
     const dir=PAWN_DIR[color];
     const tr=row+dir;
-    if(tr>=0&&tr<=8){
+    if(tr>=0&&tr<=9){
       if(!gp(board,tr,col)){
         mv.push({from:[row,col],to:[tr,col],capture:false,promo:tr===PAWN_PROMO[color]});
         if(row===PAWN_START[color]){
           const tr2=row+dir*2;
-          if(tr2>=0&&tr2<=8&&!gp(board,tr2,col))
+          if(tr2>=0&&tr2<=9&&!gp(board,tr2,col))
             mv.push({from:[row,col],to:[tr2,col],capture:false,promo:false,doublePush:true});
         }
       }
       [-1,1].forEach(dc=>{
-        if(col+dc<0||col+dc>9)return;
+        if(col+dc<0||col+dc>8)return;
         const t=gp(board,tr,col+dc);
         if(t&&isEnemy(t,color))
           mv.push({from:[row,col],to:[tr,col+dc],capture:true,promo:tr===PAWN_PROMO[color]});
@@ -819,9 +820,9 @@ function genMoves(board,row,col,color,cr){
 function applyMove(board,move,promo='Q'){
   const nb=[...board];
   const[fr,fc]=move.from,[tr,tc]=move.to;
-  const pc=nb[fr*10+fc];
-  nb[fr*10+fc]=null;
-  nb[tr*10+tc]=move.promo?{type:promo,color:pc.color}:pc;
+  const pc=nb[fr*9+fc];
+  nb[fr*9+fc]=null;
+  nb[tr*9+tc]=move.promo?{type:promo,color:pc.color}:pc;
   return nb;
 }
 
@@ -839,7 +840,7 @@ function isKingAlive(board,color){
 function isInCheck(board,color){
   const teamKingColor=TEAMS[color]==='A'?'teamA':'teamB';
   let kr=-1,kc=-1;
-  for(let i=0;i<90;i++){const p=board[i];if(p&&p.type==='K'&&p.color===teamKingColor){kr=Math.floor(i/10);kc=i%10;break;}}
+  for(let i=0;i<90;i++){const p=board[i];if(p&&p.type==='K'&&p.color===teamKingColor){kr=Math.floor(i/9);kc=i%9;break;}}
   if(kr===-1)return false;
   for(let i=0;i<90;i++){
     const p=board[i];
@@ -848,7 +849,7 @@ function isInCheck(board,color){
     if(_elimSet.has(p.color))continue;
     if(TEAMS[p.color]===TEAMS[color])continue;
     if(p.color===teamKingColor)continue;
-    const er=Math.floor(i/10),ec=i%10;
+    const er=Math.floor(i/9),ec=i%9;
     if(genMoves(board,er,ec,p.color,null).some(m=>m.to[0]===kr&&m.to[1]===kc))return true;
   }
   return false;
@@ -857,7 +858,7 @@ function isInCheck(board,color){
 // Checkmate disabled — shared king cannot move; game won by king capture only
 function isCheckmate(board,color,cr,elimSetForCheck){ return false; }
 
-function sqName(r,c){return String.fromCharCode(97+c)+(9-r)}
+function sqName(r,c){return String.fromCharCode(97+c)+(10-r)}
 
 // ── Deserialization ───────────────────────────────────────────────
 function deserBoard(raw){
@@ -886,16 +887,16 @@ function deserCR(raw){
 // d2b: display coords → board coords
 function b2d(r,c,p){
   if(p==='red')   return [r,   c  ];
-  if(p==='gold')  return [r,   9-c];
-  if(p==='blue')  return [8-r, c  ];
-  if(p==='green') return [8-r, 9-c];
+  if(p==='gold')  return [r,   8-c];
+  if(p==='blue')  return [9-r, c  ];
+  if(p==='green') return [9-r, 8-c];
   return [r,c];
 }
 function d2b(dr,dc,p){
   if(p==='red')   return [dr,   dc  ];
-  if(p==='gold')  return [dr,   9-dc];
-  if(p==='blue')  return [8-dr, dc  ];
-  if(p==='green') return [8-dr, 9-dc];
+  if(p==='gold')  return [dr,   8-dc];
+  if(p==='blue')  return [9-dr, dc  ];
+  if(p==='green') return [9-dr, 8-dc];
   return [dr,dc];
 }
 
@@ -1062,9 +1063,9 @@ function drawSplitKing(ctx, teamColor, cx, cy, sz){
 
 function renderBoard(ctx,board,selSq,legals,lastMv,persp,elimSet){
   const S=80;
-  const ROWS=9, COLS=10;
+  const ROWS=10, COLS=9;
   const TH=BOARD_THEMES[_boardThemeIdx]||BOARD_THEMES[0];
-  ctx.clearRect(0,0,800,720);
+  ctx.clearRect(0,0,720,800);
   for(let dr=0;dr<ROWS;dr++){
     for(let dc=0;dc<COLS;dc++){
       const[r,c]=d2b(dr,dc,persp);
@@ -1090,12 +1091,14 @@ function renderBoard(ctx,board,selSq,legals,lastMv,persp,elimSet){
   for(let i=0;i<ROWS;i++){
     const lt=i%2===0;
     const[bRow]=d2b(i,0,persp);
-    ctx.fillStyle=lt?TH.coordDark:TH.coordLight;ctx.textAlign='left';ctx.textBaseline='top';ctx.fillText(9-bRow,i*S+3,i*S+2);
+    ctx.fillStyle=lt?TH.coordDark:TH.coordLight;ctx.textAlign='left';ctx.textBaseline='top';
+    ctx.fillText(10-bRow, 3, i*S+2);
   }
   for(let i=0;i<COLS;i++){
     const lt=i%2===0;
-    const[,bCol]=d2b(8,i,persp);
-    ctx.fillStyle=lt?TH.coordLight:TH.coordDark;ctx.textAlign='right';ctx.textBaseline='bottom';ctx.fillText(String.fromCharCode(97+bCol),(i+1)*S-3,720-2);
+    const[,bCol]=d2b(9,i,persp);
+    ctx.fillStyle=lt?TH.coordLight:TH.coordDark;ctx.textAlign='right';ctx.textBaseline='bottom';
+    ctx.fillText(String.fromCharCode(97+bCol),(i+1)*S-3,800-2);
   }
   // Check glow on shared king
   if(histIdx<0){
@@ -1112,16 +1115,14 @@ function renderBoard(ctx,board,selSq,legals,lastMv,persp,elimSet){
       for(let i=0;i<90;i++){
         const p=board[i];
         if(p&&p.type==='K'&&p.color===teamKingColor){
-          const kr=Math.floor(i/10),kc=i%10;
+          const kr=Math.floor(i/9),kc=i%9;
           const[dr2,dc2]=b2d(kr,kc,persp);
-          const cx2=dc2*S+S/2, cy2=dr2*S+S/2;
+          const cx2=dc2*S+S/2,cy2=dr2*S+S/2;
           const grad=ctx.createRadialGradient(cx2,cy2,4,cx2,cy2,S*0.62);
           grad.addColorStop(0,'rgba(255,40,40,0.70)');
           grad.addColorStop(0.55,'rgba(220,20,20,0.32)');
           grad.addColorStop(1,'rgba(180,0,0,0)');
-          ctx.fillStyle=grad;
-          ctx.fillRect(dc2*S,dr2*S,S,S);
-          break;
+          ctx.fillStyle=grad;ctx.fillRect(dc2*S,dr2*S,S,S);break;
         }
       }
     });
@@ -1291,16 +1292,15 @@ function enterGame(){
 
 function fitCanvas(c){
   if(window.innerWidth<=640){
-    c.style.width='';
-    c.style.height='';
+    c.style.width=''; c.style.height='';
   } else {
-    // 9x10 board: width = cols*S, height = rows*S → ratio 10:9
-    const maxW=Math.min(800,window.innerWidth-540);
-    const maxH=Math.min(720,window.innerHeight-210);
-    // Maintain 10:9 ratio
-    const sz=Math.max(270,Math.min(maxW, maxH*10/9));
-    c.style.width=sz+'px';
-    c.style.height=(sz*9/10)+'px';
+    // 9 cols × 10 rows → portrait ratio 9:10
+    const maxH=Math.min(800,window.innerHeight-210);
+    const maxW=Math.min(720,window.innerWidth-540);
+    // maintain 9:10 ratio
+    const h=Math.max(270,Math.min(maxH,maxW*10/9));
+    c.style.height=h+'px';
+    c.style.width=(h*9/10)+'px';
   }
 }
 
@@ -1432,10 +1432,10 @@ function updCornerNames(){
 function clickToBoard(e){
   const canvas=document.getElementById('gc');
   const rect=canvas.getBoundingClientRect();
-  const x=(e.clientX-rect.left)*(800/rect.width);
-  const y=(e.clientY-rect.top)*(720/rect.height);
+  const x=(e.clientX-rect.left)*(720/rect.width);
+  const y=(e.clientY-rect.top)*(800/rect.height);
   const dc=Math.floor(x/80),dr=Math.floor(y/80);
-  if(dc<0||dc>9||dr<0||dr>8)return null;
+  if(dc<0||dc>8||dr<0||dr>9)return null;
   return d2b(dr,dc,perspective);
 }
 
@@ -2733,10 +2733,10 @@ function _evToBoard(e){
   const canvas=document.getElementById('gc');
   const rect=canvas.getBoundingClientRect();
   const [cx,cy]=_getEventXY(e);
-  const x=(cx-rect.left)*(800/rect.width);
-  const y=(cy-rect.top)*(720/rect.height);
-  const dc=Math.floor(x/80), dr=Math.floor(y/80);
-  if(dc<0||dc>9||dr<0||dr>8) return null;
+  const x=(cx-rect.left)*(720/rect.width);
+  const y=(cy-rect.top)*(800/rect.height);
+  const dc=Math.floor(x/80),dr=Math.floor(y/80);
+  if(dc<0||dc>8||dr<0||dr>9) return null;
   return d2b(dr,dc,perspective);
 }
 
