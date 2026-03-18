@@ -450,10 +450,6 @@ input[type=text]:focus{border-color:#b8860b;box-shadow:0 0 10px rgba(180,140,50,
      <button id="jb" class="btn">Enter Arena</button>
     </div>
     <div id="stat">Enter your name and join!</div>
-    <div style="font-size:11px;color:#405060;text-align:center;margin-top:4px;font-style:italic;">
-      If stuck on "Connecting…", open Firebase Console → Realtime Database → Rules and set
-      <code style="background:rgba(255,255,255,.07);padding:1px 5px;border-radius:3px;color:#a0b8d0;">.read/.write</code> to <code style="background:rgba(255,255,255,.07);padding:1px 5px;border-radius:3px;color:#a0b8d0;">true</code>
-    </div>
    </div>
   </div>
  </div>
@@ -508,7 +504,7 @@ input[type=text]:focus{border-color:#b8860b;box-shadow:0 0 10px rgba(180,140,50,
       <div class="corner-name-cell" id="cn-tr"></div>
      </div>
      <div class="bc" id="board-wrap">
-      <canvas id="gc" width="800" height="800"></canvas>
+      <canvas id="gc" width="800" height="720"></canvas>
       <div id="pm" class="pm hidden">
        <div class="pi"><p>Promote Pawn to:</p><div id="pc2"></div></div>
       </div>
@@ -609,8 +605,8 @@ const TEAMS={red:'A',gold:'A',blue:'B',green:'B',teamA:'A',teamB:'B'};
 const TURN_ORDER=['red','blue','gold','green'];
 
 const PAWN_DIR  ={red:-1,blue:1, green:1,gold:-1};
-const PAWN_PROMO={red:0,  blue:9, green:9,gold:0};
-const PAWN_START={red:8,  blue:1, green:1,gold:8};
+const PAWN_PROMO={red:0,  blue:8, green:8,gold:0};
+const PAWN_START={red:7,  blue:1, green:1,gold:7};
 
 // King starting squares for castling reference
 // Red: King at (7,3), Rooks at (7,0) [already Boat] and... wait —
@@ -699,30 +695,28 @@ let _boardThemeIdx = 0; // default: Glass
 // Now Red King col0, Blue King col7 — far apart. Allied kings won't be adjacent.
 // Castling: each king moves 2 toward its Rook (king-side = toward center in this layout)
 function initBoard(){
-  const b=Array(100).fill(null);
+  const b=Array(90).fill(null);
   const P=(r,c,t,co)=>{b[r*10+c]={type:t,color:co}};
-  // ── 10×10 board — Shared King Variant ───────────────────────────
-  // Each team shares ONE immovable king placed at col 5 (center).
+  // ── 9×10 board — Shared King Variant ────────────────────────────
+  // 9 rows (0-8), 10 columns (0-9)
   // Back rank layout (cols 0-9):
   //   R  N  B  Q  B | K_shared | B  Q  N  R
   //   0  1  2  3  4      5      6  7  8  9
   //
-  // Team A (bottom, row 9): Red (cols 0-4) + shared K + Gold (cols 6-9)
-  // Team B (top,  row 0): Blue (cols 0-4) + shared K + Green (cols 6-9)
-  //
-  // King color stored as 'teamA' / 'teamB' — rendered split-coloured.
-  // King type === 'K' always returns [] from genMoves (immovable).
+  // Team A (bottom, row 8): Red (cols 0-4) + shared K at col 5 + Gold (cols 6-9)
+  // Team B (top,  row 0): Blue (cols 0-4) + shared K at col 5 + Green (cols 6-9)
+  // Pawns one row in from the back rank.
 
-  // Team A — bottom
-  P(9,0,'R','red');  P(9,1,'N','red');  P(9,2,'B','red');  P(9,3,'Q','red');  P(9,4,'B','red');
-  P(9,5,'K','teamA');                   // Shared king — split Red+Gold, cannot move
-  P(9,6,'B','gold'); P(9,7,'Q','gold'); P(9,8,'N','gold'); P(9,9,'R','gold');
-  for(let c=0;c<5;c++)  P(8,c,'P','red');
-  for(let c=5;c<10;c++) P(8,c,'P','gold');
+  // Team A — bottom (row 8 = back rank, row 7 = pawns)
+  P(8,0,'R','red');  P(8,1,'N','red');  P(8,2,'B','red');  P(8,3,'Q','red');  P(8,4,'B','red');
+  P(8,5,'K','teamA');
+  P(8,6,'B','gold'); P(8,7,'Q','gold'); P(8,8,'N','gold'); P(8,9,'R','gold');
+  for(let c=0;c<5;c++)  P(7,c,'P','red');
+  for(let c=5;c<10;c++) P(7,c,'P','gold');
 
-  // Team B — top
+  // Team B — top (row 0 = back rank, row 1 = pawns)
   P(0,0,'R','blue'); P(0,1,'N','blue'); P(0,2,'B','blue'); P(0,3,'Q','blue'); P(0,4,'B','blue');
-  P(0,5,'K','teamB');                   // Shared king — split Blue+Green, cannot move
+  P(0,5,'K','teamB');
   P(0,6,'B','green'); P(0,7,'Q','green'); P(0,8,'N','green'); P(0,9,'R','green');
   for(let c=0;c<5;c++)  P(1,c,'P','blue');
   for(let c=5;c<10;c++) P(1,c,'P','green');
@@ -745,7 +739,7 @@ function initCastlingRights(){
 
 // ── Game Logic ────────────────────────────────────────────────────
 function gp(b,r,c){
-  if(r<0||r>9||c<0||c>9)return undefined;
+  if(r<0||r>8||c<0||c>9)return undefined;
   return b[r*10+c]||null;
 }
 // _elimSet tracks eliminated colors so their pieces are capturable by anyone incl. allies
@@ -768,7 +762,7 @@ function genMoves(board,row,col,color,cr){
 
   const slide=(dr,dc)=>{
     let r=row+dr,c=col+dc;
-    while(r>=0&&r<=9&&c>=0&&c<=9){
+    while(r>=0&&r<=8&&c>=0&&c<=9){
       const t=gp(board,r,c);
       if(isFriend(t,color))break;
       mv.push({from:[row,col],to:[r,c],capture:!!t});
@@ -778,7 +772,7 @@ function genMoves(board,row,col,color,cr){
   };
   const step=(dr,dc)=>{
     const tr=row+dr,tc=col+dc;
-    if(tr<0||tr>9||tc<0||tc>9)return;
+    if(tr<0||tr>8||tc<0||tc>9)return;
     if(!isFriend(gp(board,tr,tc),color))
       mv.push({from:[row,col],to:[tr,tc],capture:!!gp(board,tr,tc)});
   };
@@ -786,13 +780,12 @@ function genMoves(board,row,col,color,cr){
   if(pc.type==='P'){
     const dir=PAWN_DIR[color];
     const tr=row+dir;
-    if(tr>=0&&tr<=9){
+    if(tr>=0&&tr<=8){
       if(!gp(board,tr,col)){
         mv.push({from:[row,col],to:[tr,col],capture:false,promo:tr===PAWN_PROMO[color]});
-        // Double push from starting rank
         if(row===PAWN_START[color]){
           const tr2=row+dir*2;
-          if(tr2>=0&&tr2<=9&&!gp(board,tr2,col))
+          if(tr2>=0&&tr2<=8&&!gp(board,tr2,col))
             mv.push({from:[row,col],to:[tr2,col],capture:false,promo:false,doublePush:true});
         }
       }
@@ -839,16 +832,16 @@ function updateCR(cr,move,board){
 
 function isKingAlive(board,color){
   const teamKingColor=TEAMS[color]==='A'?'teamA':'teamB';
-  for(let i=0;i<100;i++){const p=board[i];if(p&&p.type==='K'&&p.color===teamKingColor)return true;}
+  for(let i=0;i<90;i++){const p=board[i];if(p&&p.type==='K'&&p.color===teamKingColor)return true;}
   return false;
 }
 
 function isInCheck(board,color){
   const teamKingColor=TEAMS[color]==='A'?'teamA':'teamB';
   let kr=-1,kc=-1;
-  for(let i=0;i<100;i++){const p=board[i];if(p&&p.type==='K'&&p.color===teamKingColor){kr=Math.floor(i/10);kc=i%10;break;}}
+  for(let i=0;i<90;i++){const p=board[i];if(p&&p.type==='K'&&p.color===teamKingColor){kr=Math.floor(i/10);kc=i%10;break;}}
   if(kr===-1)return false;
-  for(let i=0;i<100;i++){
+  for(let i=0;i<90;i++){
     const p=board[i];
     if(!p)continue;
     if(p.color===color)continue;
@@ -864,14 +857,14 @@ function isInCheck(board,color){
 // Checkmate disabled — shared king cannot move; game won by king capture only
 function isCheckmate(board,color,cr,elimSetForCheck){ return false; }
 
-function sqName(r,c){return String.fromCharCode(97+c)+(10-r)}
+function sqName(r,c){return String.fromCharCode(97+c)+(9-r)}
 
 // ── Deserialization ───────────────────────────────────────────────
 function deserBoard(raw){
-  const b=Array(100).fill(null);
+  const b=Array(90).fill(null);
   if(!raw)return b;
-  if(Array.isArray(raw)){raw.forEach((v,i)=>{if(i<100&&v&&v.type)b[i]=v;});}
-  else{Object.entries(raw).forEach(([k,v])=>{const i=+k;if(i>=0&&i<100&&v&&v.type)b[i]=v;});}
+  if(Array.isArray(raw)){raw.forEach((v,i)=>{if(i<90&&v&&v.type)b[i]=v;});}
+  else{Object.entries(raw).forEach(([k,v])=>{const i=+k;if(i>=0&&i<90&&v&&v.type)b[i]=v;});}
   return b;
 }
 function deserElim(raw){
@@ -894,15 +887,15 @@ function deserCR(raw){
 function b2d(r,c,p){
   if(p==='red')   return [r,   c  ];
   if(p==='gold')  return [r,   9-c];
-  if(p==='blue')  return [9-r, c  ];
-  if(p==='green') return [9-r, 9-c];
+  if(p==='blue')  return [8-r, c  ];
+  if(p==='green') return [8-r, 9-c];
   return [r,c];
 }
 function d2b(dr,dc,p){
   if(p==='red')   return [dr,   dc  ];
   if(p==='gold')  return [dr,   9-dc];
-  if(p==='blue')  return [9-dr, dc  ];
-  if(p==='green') return [9-dr, 9-dc];
+  if(p==='blue')  return [8-dr, dc  ];
+  if(p==='green') return [8-dr, 9-dc];
   return [dr,dc];
 }
 
@@ -1019,12 +1012,10 @@ function drawPiece(ctx, type, colorKey, cx, cy, sz){
 }
 
 
-// ── Split-king draw helper ────────────────────────────────────────
-// Draws the shared team king: left half = one team color, right half = other
 function drawSplitKing(ctx, teamColor, cx, cy, sz){
   const isA = teamColor==='teamA';
-  const colorL = isA ? 'red'  : 'blue';   // left half color
-  const colorR = isA ? 'gold' : 'green';  // right half color
+  const colorL = isA ? 'red'  : 'blue';
+  const colorR = isA ? 'gold' : 'green';
 
   ctx.save();
   ctx.shadowColor  ='rgba(0,0,0,0.45)';
@@ -1049,15 +1040,8 @@ function drawSplitKing(ctx, teamColor, cx, cy, sz){
     ctx.clip();
     ctx.drawImage(cachedR, cx-sz/2, cy-sz/2, sz, sz);
     ctx.restore();
-    // Dividing line
-    ctx.strokeStyle='rgba(255,255,255,0.55)';
-    ctx.lineWidth=2;
-    ctx.beginPath();
-    ctx.moveTo(cx, cy-sz*0.45);
-    ctx.lineTo(cx, cy+sz*0.45);
-    ctx.stroke();
   } else {
-    // Fallback disc
+    // Fallback disc — split colour, no outline
     const cL=PIECE_COLORS[colorL];
     const cR=PIECE_COLORS[colorR];
     const r=sz*0.34;
@@ -1067,47 +1051,33 @@ function drawSplitKing(ctx, teamColor, cx, cy, sz){
     ctx.save(); ctx.beginPath(); ctx.rect(cx,cy-sz/2,sz/2,sz); ctx.clip();
     ctx.beginPath(); ctx.arc(cx,cy,r,0,Math.PI*2); ctx.fillStyle=cR.fill; ctx.fill();
     ctx.restore();
-    ctx.strokeStyle='rgba(255,255,255,0.55)'; ctx.lineWidth=2;
-    ctx.beginPath(); ctx.moveTo(cx,cy-r); ctx.lineTo(cx,cy+r); ctx.stroke();
-    ctx.strokeStyle=cL.stroke; ctx.lineWidth=sz*0.055;
-    ctx.beginPath(); ctx.arc(cx,cy,r,0,Math.PI*2); ctx.stroke();
     ctx.fillStyle='rgba(0,0,0,0.7)';
     ctx.font=`bold ${sz*0.22}px Cinzel,serif`;
     ctx.textAlign='center'; ctx.textBaseline='middle';
     ctx.fillText('K',cx,cy);
   }
-  // Crown accent ring
-  ctx.strokeStyle='rgba(255,220,50,0.65)';
-  ctx.lineWidth=2.5;
-  ctx.beginPath();
-  ctx.arc(cx, cy, sz*0.36, 0, Math.PI*2);
-  ctx.stroke();
 
   ctx.restore();
 }
 
-// ── Board Renderer ────────────────────────────────────────────────
 function renderBoard(ctx,board,selSq,legals,lastMv,persp,elimSet){
   const S=80;
-  const BSIZE=10;
+  const ROWS=9, COLS=10;
   const TH=BOARD_THEMES[_boardThemeIdx]||BOARD_THEMES[0];
-  ctx.clearRect(0,0,800,800);
-  for(let dr=0;dr<BSIZE;dr++){
-    for(let dc=0;dc<BSIZE;dc++){
+  ctx.clearRect(0,0,800,720);
+  for(let dr=0;dr<ROWS;dr++){
+    for(let dc=0;dc<COLS;dc++){
       const[r,c]=d2b(dr,dc,persp);
       ctx.fillStyle=(dr+dc)%2===0?TH.light:TH.dark;
       ctx.fillRect(dc*S,dr*S,S,S);
-      // Last move highlight
       if(lastMv){
         const[fr,fc]=lastMv.from,[tr,tc]=lastMv.to;
         if((r===fr&&c===fc)||(r===tr&&c===tc)){ctx.fillStyle=TH.lastFill;ctx.fillRect(dc*S,dr*S,S,S);}
       }
-      // Selected
       if(selSq){
         const[sdr,sdc]=b2d(selSq[0],selSq[1],persp);
         if(dr===sdr&&dc===sdc){ctx.fillStyle=TH.selFill;ctx.fillRect(dc*S,dr*S,S,S);}
       }
-      // Legal move dots/rings
       const hasLegal=legals.some(m=>{const[tdr,tdc]=b2d(m.to[0],m.to[1],persp);return dr===tdr&&dc===tdc;});
       if(hasLegal){
         if(gp(board,r,c)){ctx.strokeStyle=TH.ringStroke;ctx.lineWidth=7;ctx.beginPath();ctx.arc(dc*S+40,dr*S+40,36,0,Math.PI*2);ctx.stroke();}
@@ -1117,18 +1087,20 @@ function renderBoard(ctx,board,selSq,legals,lastMv,persp,elimSet){
   }
   // Coordinates
   ctx.shadowColor='transparent';ctx.shadowBlur=0;ctx.font='bold 11px Cinzel,serif';
-  for(let i=0;i<BSIZE;i++){
+  for(let i=0;i<ROWS;i++){
     const lt=i%2===0;
     const[bRow]=d2b(i,0,persp);
-    ctx.fillStyle=lt?TH.coordDark:TH.coordLight;ctx.textAlign='left';ctx.textBaseline='top';ctx.fillText(10-bRow,i*S+3,i*S+2);
-    const[,bCol]=d2b(9,i,persp);
-    ctx.fillStyle=lt?TH.coordLight:TH.coordDark;ctx.textAlign='right';ctx.textBaseline='bottom';ctx.fillText(String.fromCharCode(97+bCol),(i+1)*S-3,800-2);
+    ctx.fillStyle=lt?TH.coordDark:TH.coordLight;ctx.textAlign='left';ctx.textBaseline='top';ctx.fillText(9-bRow,i*S+3,i*S+2);
   }
-  // Check glow — red pulse behind shared team king when it is under attack
+  for(let i=0;i<COLS;i++){
+    const lt=i%2===0;
+    const[,bCol]=d2b(8,i,persp);
+    ctx.fillStyle=lt?TH.coordLight:TH.coordDark;ctx.textAlign='right';ctx.textBaseline='bottom';ctx.fillText(String.fromCharCode(97+bCol),(i+1)*S-3,720-2);
+  }
+  // Check glow on shared king
   if(histIdx<0){
     const savedElim=_elimSet;
     _elimSet=elimSet||new Set();
-    // Check each living player; shared king shown once per team
     const checkedTeams=new Set();
     COLORS.forEach(color=>{
       if(elimSet&&elimSet.has(color))return;
@@ -1137,7 +1109,7 @@ function renderBoard(ctx,board,selSq,legals,lastMv,persp,elimSet){
       if(!isInCheck(board,color))return;
       checkedTeams.add(team);
       const teamKingColor=team==='A'?'teamA':'teamB';
-      for(let i=0;i<100;i++){
+      for(let i=0;i<90;i++){
         const p=board[i];
         if(p&&p.type==='K'&&p.color===teamKingColor){
           const kr=Math.floor(i/10),kc=i%10;
@@ -1156,13 +1128,12 @@ function renderBoard(ctx,board,selSq,legals,lastMv,persp,elimSet){
     _elimSet=savedElim;
   }
   // Pieces
-  for(let dr=0;dr<BSIZE;dr++)for(let dc=0;dc<BSIZE;dc++){
+  for(let dr=0;dr<ROWS;dr++)for(let dc=0;dc<COLS;dc++){
     const[r,c]=d2b(dr,dc,persp);const p=gp(board,r,c);
     if(p){
       if(p.type==='K'&&(p.color==='teamA'||p.color==='teamB')){
-        // Split-colored shared king
-        drawSplitKing(ctx, p.color, dc*S+S/2, dr*S+S/2, S);
-      } else {
+        drawSplitKing(ctx,p.color,dc*S+S/2,dr*S+S/2,S);
+      }else{
         const ck=elimSet&&elimSet.has(p.color)?'gray':p.color;
         drawPiece(ctx,p.type,ck,dc*S+S/2,dr*S+S/2,S);
       }
@@ -1323,8 +1294,13 @@ function fitCanvas(c){
     c.style.width='';
     c.style.height='';
   } else {
-    const sz=Math.max(300,Math.min(800,window.innerWidth-540,window.innerHeight-210));
-    c.style.width=sz+'px'; c.style.height=sz+'px';
+    // 9x10 board: width = cols*S, height = rows*S → ratio 10:9
+    const maxW=Math.min(800,window.innerWidth-540);
+    const maxH=Math.min(720,window.innerHeight-210);
+    // Maintain 10:9 ratio
+    const sz=Math.max(270,Math.min(maxW, maxH*10/9));
+    c.style.width=sz+'px';
+    c.style.height=(sz*9/10)+'px';
   }
 }
 
@@ -1457,9 +1433,9 @@ function clickToBoard(e){
   const canvas=document.getElementById('gc');
   const rect=canvas.getBoundingClientRect();
   const x=(e.clientX-rect.left)*(800/rect.width);
-  const y=(e.clientY-rect.top)*(800/rect.height);
+  const y=(e.clientY-rect.top)*(720/rect.height);
   const dc=Math.floor(x/80),dr=Math.floor(y/80);
-  if(dc<0||dc>9||dr<0||dr>9)return null;
+  if(dc<0||dc>9||dr<0||dr>8)return null;
   return d2b(dr,dc,perspective);
 }
 
@@ -1552,7 +1528,7 @@ async function commitMove(move,promo){
     if(teamPlayers.length===0)return;
     // King was alive before move, check if it's gone now
     let kingGone=true;
-    for(let i=0;i<100;i++){const p=newBoard[i];if(p&&p.type==='K'&&p.color===teamKing){kingGone=false;break;}}
+    for(let i=0;i<90;i++){const p=newBoard[i];if(p&&p.type==='K'&&p.color===teamKing){kingGone=false;break;}}
     if(kingGone){
       teamPlayers.forEach(col=>{
         newElim.push(col);newElimSet.add(col);
@@ -2758,9 +2734,9 @@ function _evToBoard(e){
   const rect=canvas.getBoundingClientRect();
   const [cx,cy]=_getEventXY(e);
   const x=(cx-rect.left)*(800/rect.width);
-  const y=(cy-rect.top)*(800/rect.height);
+  const y=(cy-rect.top)*(720/rect.height);
   const dc=Math.floor(x/80), dr=Math.floor(y/80);
-  if(dc<0||dc>9||dr<0||dr>9) return null;
+  if(dc<0||dc>9||dr<0||dr>8) return null;
   return d2b(dr,dc,perspective);
 }
 
